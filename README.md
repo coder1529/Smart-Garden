@@ -14,3 +14,5 @@ Automatic plant care with remote control from a website and a flex-sensor glove.
 3. Put your Firebase admin key next to `bridge.py` (it is git-ignored) and set `KEY_FILE`, `PORT`, `GLOVE_PORT`.
 4. `python bridge.py`
 5. `firebase deploy --only hosting`
+
+Wiring diagrams: see docs/WIRING.md
