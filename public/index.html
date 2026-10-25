@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Garden</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1712; --card: #18241c; --line: #2a3d30;
+    --text: #e6efe8; --muted: #8fa596;
+    --good: #5fd38d; --bad: #e5645a; --water: #5aa9e6; --sun: #f0c04a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  header, main { max-width: 1000px; margin: auto; padding: 0 16px; }
+  header { padding-top: 24px; padding-bottom: 12px; }
+  .hbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 26px; }
+  .sub, .note { color: var(--muted); font-size: 14px; }
+  .sub { margin-top: 4px; }
+  #pots { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .card.pot { cursor: pointer; }
+  .card.pot.sel { border-color: var(--good); }
+  .block { margin-top: 16px; }
+  .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; gap: 8px; flex-wrap: wrap; }
+  .name { font-weight: 600; font-size: 18px; }
+  .badge { font-size: 12px; padding: 3px 10px; border-radius: 99px; background: #1f3a28; color: var(--good); }
+  .badge.off { background: #3a2422; color: var(--bad); }
+  .row { display: flex; justify-content: space-between; font-size: 14px; margin: 4px 0; }
+  .row span:first-child { color: var(--muted); }
+  .bar { height: 6px; background: #24362a; border-radius: 3px; overflow: hidden; margin-bottom: 10px; }
+  .bar div { height: 100%; transition: width .4s; }
+  .state { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+  .btn { background: #24362a; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 14px; cursor: pointer; }
+  .btn.primary { background: var(--good); border-color: var(--good); color: #0f1712; font-weight: 600; }
+  .btn.danger { background: #3a2422; border-color: #5a3330; color: #ffb3ad; }
+  .btn.small { padding: 4px 10px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.active { background: var(--good); border-color: var(--good); color: #0f1712; font-weight: 600; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  fieldset:disabled { opacity: .55; }
+  .section { margin-top: 18px; }
+  .section h3 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 4px; }
+  .field { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; flex-wrap: wrap; }
+  .qrow { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .qrow > span { font-weight: 600; }
+  .ctl { display: flex; align-items: center; gap: 8px; }
+  input[type=number], select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 14px; }
+  input[type=number] { width: 90px; }
+  input[type=color] { width: 48px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 2px; }
+  input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--good); }
+  output { min-width: 32px; text-align: right; font-size: 13px; color: var(--muted); }
+  .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .msg.err { color: var(--bad); }
+  .empty { color: var(--muted); padding: 24px 0; }
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <div>
+      <h1>Smart Garden</h1>
+      <div class="sub" id="status">Connecting...</div>
+    </div>
+    <div class="actions" id="authBox"></div>
+  </div>
+</header>
+<main>
+  <div id="pots"><div class="empty">Waiting for pots...</div></div>
+
+  <div class="card block" id="controls" hidden>
+    <div class="top">
+      <div class="name" id="ctlTitle">Controls</div>
+      <span class="note" id="sync"></span>
+    </div>
+    <div class="note" id="signinNote">Sign in to control this pot.</div>
+    <fieldset id="ctlset" disabled>
+      <div class="qrow">
+        <span>Water</span>
+        <div class="actions">
+          <button class="btn" id="waterNow" type="button">Water now</button>
+          <button class="btn danger" id="stopWater" type="button">Stop</button>
+          <button class="btn" id="autoOn" type="button">Auto ON</button>
+          <button class="btn" id="autoOff" type="button">Auto OFF</button>
+        </div>
+      </div>
+      <div class="qrow">
+        <span>Grow light</span>
+        <div class="actions">
+          <button class="btn" data-mode="on" type="button">On</button>
+          <button class="btn" data-mode="off" type="button">Off</button>
+          <button class="btn" data-mode="auto" type="button">Auto</button>
+        </div>
+      </div>
+      <div id="form"></div>
+      <div class="actions" style="margin-top:16px">
+        <button class="btn primary" id="save" type="button">Save settings</button>
+        <button class="btn" id="revert" type="button">Undo changes</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </fieldset>
+  </div>
+
+  <div class="card block" style="margin-bottom:32px">
+    <div class="top"><div class="name" id="chartTitle">Last 24 hours</div></div>
+    <canvas id="chart" height="130"></canvas>
+  </div>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue, query, orderByChild, startAt, set, push }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA4X0di6J_6Tewu63UEH3W5VCuKjX7u_jU",
+  authDomain: "smart-garden-20afa.firebaseapp.com",
+  databaseURL: "https://smart-garden-20afa-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "smart-garden-20afa",
+  storageBucket: "smart-garden-20afa.firebasestorage.app",
+  messagingSenderId: "225945196335",
+  appId: "1:225945196335:web:9255eb3a95ca45e8ff73da",
+  measurementId: "G-DXFQX0SPY5"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+
+const STALE_MS = 15000;
+// Difference between this device's clock and Firebase's server clock
+let serverOffset = 0;
+onValue(ref(db, ".info/serverTimeOffset"), s => { serverOffset = s.val() || 0; });
+
+const WATER = { idle: "Idle", watering: "Watering", soaking: "Soaking" };
+
+const DEFAULTS = {
+  autoWater: true, dryPct: 33, wetPct: 65, pulseSec: 3, soakSec: 60, checkSec: 10, maxPulses: 5,
+  lightMode: "auto", lightOnPct: 70, lightOffPct: 80, brightness: 200, color: "#ff0078",
+  soilRawDry: 577, soilRawWet: 280, lightRawDark: 1023, lightRawBright: 0
+};
+
+// [name, label, kind, min, max, step, live raw field]
+const FIELDS = [
+  ["autoWater",      "Automatic watering",               "bool"],
+  ["dryPct",         "Start watering below (soil %)",    "num", 0, 100, 1],
+  ["wetPct",         "Stop watering at (soil %)",        "num", 0, 100, 1],
+  ["pulseSec",       "Pump pulse length (s)",            "num", 0.2, 60, 0.1],
+  ["soakSec",        "Soak time between pulses (s)",     "num", 1, 3600, 1],
+  ["checkSec",       "Check soil every (s)",             "num", 1, 3600, 1],
+  ["maxPulses",      "Max pulses per cycle",             "num", 1, 50, 1],
+  ["lightMode",      "Mode",                             "mode"],
+  ["lightOnPct",     "Auto: turn on below (light %)",    "num", 0, 100, 1],
+  ["lightOffPct",    "Auto: turn off above (light %)",   "num", 0, 100, 1],
+  ["brightness",     "Brightness",                       "range", 0, 255, 1],
+  ["color",          "Color",                            "color"],
+  ["soilRawDry",     "Soil raw: dry (probe in air)",     "cal", 0, 1023, 1, "rawSoil"],
+  ["soilRawWet",     "Soil raw: wet (probe in water)",   "cal", 0, 1023, 1, "rawSoil"],
+  ["lightRawDark",   "Light raw: dark (covered)",        "cal", 0, 1023, 1, "rawLight"],
+  ["lightRawBright", "Light raw: bright (flashlight)",   "cal", 0, 1023, 1, "rawLight"]
+];
+const SECTIONS = [["Watering", 0, 7], ["Grow light", 7, 12], ["Calibration", 12, 16]];
+
+let live = {}, config = {}, applied = {}, commands = {};
+let selected = null, user = null, dirty = false;
+let stopHistory = null, stopCommands = null, chart = null;
+
+const $ = id => document.getElementById(id);
+const toObj = snap => { const o = {}; snap.forEach(c => { o[c.key] = c.val(); }); return o; };
+const fmt = (v, d = 0) => (v === null || v === undefined) ? "--" : Number(v).toFixed(d);
+const hhmm = ms => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+// ---------- Form ----------
+function fieldHTML([name, label, kind, min, max, step, raw]) {
+  let input;
+  if (kind === "bool") input = `<input type="checkbox" id="f-${name}">`;
+  else if (kind === "mode") input = `<select id="f-${name}">
+      <option value="auto">Auto (light sensor)</option>
+      <option value="on">Always on</option>
+      <option value="off">Always off</option></select>`;
+  else if (kind === "color") input = `<input type="color" id="f-${name}">`;
+  else if (kind === "range") input = `<input type="range" id="f-${name}" min="${min}" max="${max}" step="${step}"><output id="o-${name}"></output>`;
+  else input = `<input type="number" id="f-${name}" min="${min}" max="${max}" step="${step}">`;
+  if (kind === "cal") input += `<button type="button" class="btn small" data-use="${name}" data-raw="${raw}">Use current</button>`;
+  return `<div class="field"><label for="f-${name}">${label}</label><span class="ctl">${input}</span></div>`;
+}
+
+$("form").innerHTML = SECTIONS.map(([title, a, b]) => `
+  <div class="section">
+    <h3>${title}</h3>
+    ${title === "Calibration" ? `<div class="note" id="rawNow"></div>` : ""}
+    ${FIELDS.slice(a, b).map(fieldHTML).join("")}
+  </div>`).join("");
+
+function updateOutputs() {
+  $("o-brightness").textContent = $("f-brightness").value;
+}
+
+function setForm(cfg) {
+  for (const [name, , kind] of FIELDS) {
+    const el = $(`f-${name}`);
+    const v = cfg[name] ?? DEFAULTS[name];
+    if (kind === "bool") el.checked = !!v;
+    else el.value = v;
+  }
+  updateOutputs();
+  dirty = false;
+}
+
+function readForm() {
+  const out = {};
+  for (const [name, , kind] of FIELDS) {
+    const el = $(`f-${name}`);
+    if (kind === "bool") out[name] = el.checked;
+    else if (kind === "mode" || kind === "color") out[name] = el.value;
+    else out[name] = Number(el.value);
+  }
+  return out;
+}
+
+function validate(v) {
+  for (const [name, label, kind, min, max] of FIELDS) {
+    if (["num", "range", "cal"].includes(kind)) {
+      if (!Number.isFinite(v[name]) || v[name] < min || v[name] > max)
+        return `"${label}" must be between ${min} and ${max}.`;
+    }
+  }
+  if (v.dryPct >= v.wetPct) return "Start watering % must be lower than stop watering %.";
+  if (v.lightOnPct >= v.lightOffPct) return "Light on % must be lower than light off %.";
+  if (v.soilRawDry === v.soilRawWet) return "Soil dry and wet raw values can't be the same.";
+  if (v.lightRawDark === v.lightRawBright) return "Light dark and bright raw values can't be the same.";
+  return null;
+}
+
+function showMsg(text, isErr = false) {
+  $("msg").textContent = text;
+  $("msg").className = "msg" + (isErr ? " err" : "");
+}
+
+// ---------- Pot cards ----------
+function card(id, d, now) {
+  const online = d.online && now - d.updatedAt < STALE_MS;
+  let water = WATER[d.water] || d.water;
+  if (d.water === "watering") water += ` (pulse ${(d.pulses ?? 0) + 1})`;
+  if (d.water === "soaking") water += ` (after pulse ${d.pulses ?? "?"})`;
+  return `
+    <div class="card pot ${id === selected ? "sel" : ""}" data-id="${id}">
+      <div class="top">
+        <div class="name">Pot ${id}</div>
+        <span class="badge ${online ? "" : "off"}">${online ? "Online" : "Offline"}</span>
+      </div>
+      <div class="row"><span>Soil moisture</span><span>${fmt(d.soil)} %</span></div>
+      <div class="bar"><div style="width:${d.soil || 0}%;background:var(--water)"></div></div>
+      <div class="row"><span>Light</span><span>${fmt(d.light)} %</span></div>
+      <div class="bar"><div style="width:${d.light || 0}%;background:var(--sun)"></div></div>
+      <div class="row"><span>Temperature</span><span>${fmt(d.temp, 1)} &deg;C</span></div>
+      <div class="row"><span>Air humidity</span><span>${fmt(d.hum)} %</span></div>
+      <div class="state">
+        <span>${water}</span>
+        <span>${d.autoWater === false ? "Auto water OFF / " : ""}Grow light ${d.grow ? "ON" : "OFF"}</span>
+      </div>
+    </div>`;
+}
+
+function renderPots() {
+  const ids = Object.keys(live).sort((a, b) => a - b);
+  const now = Date.now() + serverOffset;   // Firebase server time
+  if (!ids.length) {
+    $("pots").innerHTML = `<div class="empty">Waiting for pots...</div>`;
+    $("status").textContent = "Connected, no pots yet";
+    return;
+  }
+  if (!selected || !live[selected]) selectPot(ids[0]);
+  $("pots").innerHTML = ids.map(id => card(id, live[id], now)).join("");
+  const latest = Math.max(...ids.map(id => live[id].updatedAt || 0));
+  $("status").textContent = `${ids.length} pot${ids.length > 1 ? "s" : ""} - last update ${new Date(latest).toLocaleTimeString()}`;
+}
+
+$("pots").addEventListener("click", e => {
+  const c = e.target.closest("[data-id]");
+  if (c && c.dataset.id !== selected) {
+    if (dirty && !confirm("Discard unsaved changes?")) return;
+    selectPot(c.dataset.id);
+    renderPots();
+  }
+});
+
+function selectPot(id) {
+  selected = id;
+  setForm(config[id] || {});
+  showMsg("");
+  watchHistory(id);
+  renderControls();
+}
+
+// ---------- Controls ----------
+function syncText() {
+  const cfg = config[selected];
+  const ap = applied[selected] || {};
+  const parts = [];
+  if (cfg) {
+    const n = Object.keys(cfg).filter(k => String(cfg[k]) !== String(ap[k])).length;
+    if (n) parts.push(`Sending ${n} setting${n > 1 ? "s" : ""} to the pot...`);
+  }
+  const acts = Object.keys(commands[selected] || {}).length;
+  if (acts) parts.push(`${acts} action${acts > 1 ? "s" : ""} queued`);
+  if (!parts.length) return cfg ? "All settings applied" : "Using the pot's saved settings";
+  return parts.join(" / ");
+}
+
+function renderControls() {
+  $("controls").hidden = !selected;
+  if (!selected) return;
+  $("ctlTitle").textContent = `Pot ${selected} controls`;
+  $("chartTitle").textContent = `Pot ${selected} - last 24 hours`;
+  $("sync").textContent = syncText();
+  const d = live[selected] || {};
+  $("rawNow").textContent = `Current raw readings: soil ${d.rawSoil ?? "--"}, light ${d.rawLight ?? "--"}`;
+  const cfg = { ...DEFAULTS, ...(config[selected] || {}) };
+  const autoNow = d.autoWater ?? cfg.autoWater;   // what the pot actually reports
+  $("autoOn").classList.toggle("active", !!autoNow);
+  $("autoOff").classList.toggle("active", !autoNow);
+  document.querySelectorAll("[data-mode]").forEach(b =>
+    b.classList.toggle("active", b.dataset.mode === cfg.lightMode));
+}
+
+$("form").addEventListener("input", () => { dirty = true; updateOutputs(); });
+
+$("form").addEventListener("click", e => {
+  const b = e.target.closest("[data-use]");
+  if (!b) return;
+  const d = live[selected];
+  if (!d || d[b.dataset.raw] == null) return showMsg("No live reading yet.", true);
+  $(`f-${b.dataset.use}`).value = d[b.dataset.raw];
+  dirty = true;
+});
+
+$("save").onclick = async () => {
+  const v = readForm();
+  const err = validate(v);
+  if (err) return showMsg(err, true);
+  try {
+    await set(ref(db, `config/${selected}`), v);
+    dirty = false;
+    showMsg("Saved. Sending to the pot...");
+  } catch (e) {
+    showMsg("Save failed: " + e.message, true);
+  }
+};
+
+$("revert").onclick = () => { setForm(config[selected] || {}); showMsg(""); };
+
+async function sendAction(action, label) {
+  try {
+    await push(ref(db, `commands/${selected}`), { action, t: Date.now() });
+    showMsg(`${label} sent to Pot ${selected}.`);
+  } catch (e) {
+    showMsg("Failed: " + e.message, true);
+  }
+}
+$("waterNow").onclick = () => sendAction("waterNow", "Water now");
+$("stopWater").onclick = () => sendAction("stopWater", "Stop watering");
+
+async function quickSet(name, value, label) {
+  try {
+    await set(ref(db, `config/${selected}/${name}`), value);
+    // keep the settings form in step so a later Save doesn't undo this
+    const el = $(`f-${name}`);
+    if (el.type === "checkbox") el.checked = value; else el.value = value;
+    showMsg(`${label} sent to Pot ${selected}.`);
+  } catch (e) {
+    showMsg("Failed: " + e.message, true);
+  }
+}
+$("autoOn").onclick  = () => quickSet("autoWater", true,  "Auto watering ON");
+$("autoOff").onclick = () => quickSet("autoWater", false, "Auto watering OFF");
+document.querySelectorAll("[data-mode]").forEach(b => {
+  b.onclick = () => quickSet("lightMode", b.dataset.mode, `Grow light ${b.dataset.mode.toUpperCase()}`);
+});
+
+// ---------- Auth ----------
+onAuthStateChanged(auth, u => {
+  user = u;
+  const box = $("authBox");
+  box.innerHTML = "";
+  if (u) {
+    const who = document.createElement("span");
+    who.className = "note";
+    who.textContent = u.email;
+    const out = document.createElement("button");
+    out.className = "btn small";
+    out.textContent = "Sign out";
+    out.onclick = () => signOut(auth);
+    box.append(who, out);
+  } else {
+    const inBtn = document.createElement("button");
+    inBtn.className = "btn";
+    inBtn.textContent = "Sign in with Google";
+    inBtn.onclick = () => signInWithPopup(auth, new GoogleAuthProvider())
+      .catch(e => showMsg("Sign-in failed: " + e.message, true));
+    box.append(inBtn);
+  }
+  $("ctlset").disabled = !u;
+  $("signinNote").hidden = !!u;
+
+  if (stopCommands) { stopCommands(); stopCommands = null; }
+  commands = {};
+  if (u) {
+    stopCommands = onValue(ref(db, "commands"),
+      s => { commands = toObj(s); renderControls(); },
+      () => showMsg("This account isn't allowed to control the garden.", true));
+  }
+  renderControls();
+});
+
+// ---------- History chart ----------
+function watchHistory(id) {
+  if (stopHistory) stopHistory();
+  const q = query(ref(db, `history/${id}`), orderByChild("t"), startAt(Date.now() - 86400000));
+  stopHistory = onValue(q, snap => {
+    const pts = [];
+    snap.forEach(c => { pts.push(c.val()); });
+    drawChart(pts);
+  });
+}
+
+function drawChart(pts) {
+  const data = {
+    labels: pts.map(p => hhmm(p.t)),
+    datasets: [
+      { label: "Soil %",       data: pts.map(p => p.soil),  borderColor: "#5aa9e6" },
+      { label: "Light %",      data: pts.map(p => p.light), borderColor: "#f0c04a" },
+      { label: "Temp \u00b0C", data: pts.map(p => p.temp),  borderColor: "#f08a5d" },
+      { label: "Humidity %",   data: pts.map(p => p.hum),   borderColor: "#5fd38d" }
+    ].map(ds => ({ ...ds, borderWidth: 2, pointRadius: 0, tension: 0.3 }))
+  };
+  if (chart) { chart.data = data; chart.update(); return; }
+  chart = new Chart($("chart"), {
+    type: "line",
+    data,
+    options: {
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      scales: {
+        x: { ticks: { color: "#8fa596", maxTicksLimit: 8 }, grid: { color: "#22332a" } },
+        y: { min: 0, max: 100, ticks: { color: "#8fa596" }, grid: { color: "#22332a" } }
+      },
+      plugins: { legend: { labels: { color: "#e6efe8" } } }
+    }
+  });
+}
+
+// ---------- Live data ----------
+onValue(ref(db, "live"), s => { live = toObj(s); renderPots(); renderControls(); },
+  err => { $("status").textContent = "Database error: " + err.message; });
+
+onValue(ref(db, "config"), s => {
+  config = toObj(s);
+  if (selected && !dirty) setForm(config[selected] || {});
+  renderControls();
+});
+
+onValue(ref(db, "applied"), s => { applied = toObj(s); renderControls(); });
+
+setInterval(renderPots, 5000);   // re-check online/offline even when no data arrives
+</script>
+</body>
+</html>
