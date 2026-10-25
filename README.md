@@ -16,3 +16,5 @@ Automatic plant care with remote control from a website and a flex-sensor glove.
 5. `firebase deploy --only hosting`
 
 Wiring diagrams: see docs/WIRING.md
+
+Hosting Web: https://smart-garden-20afa.web.app/
